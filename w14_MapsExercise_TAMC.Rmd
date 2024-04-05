@@ -1,0 +1,241 @@
+---
+title: "w14_MapsExercise"
+author: "Tristan A. M. Cooper"
+date: "2024-04-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+##################################################################################################################################
+
+# Preperation
+
+NOTE: DO NOT USE REGULARLY. ONLY USE IF ORIGINAL APPROACH FAULTERS.
+```{r, echo = FALSE}
+devtools::install_github('ramnathv/htmlwidgets')
+```
+
+We will also need this widget to make pretty maps:
+
+Activate the libraries
+```{r, echo = FALSE}
+library(leaflet)
+library(htmlwidgets)
+```
+
+Test: This was me, pasting a copy of the mapping process in the document and reoptimizing it, to depict a map of Denmark.
+
+```{r, echo = FALSE}
+leaflet() %>%
+  addTiles() %>%                              # add default OpenStreetMap map tiles
+  addProviderTiles("Esri.WorldImagery",       # add custom Esri World Physical map tiles
+                   options = providerTileOptions(opacity=0.5)) %>%     # make the Esri tile transparent
+  setView(lng = 11, lat = 56, zoom = 7)  %>%  # let's use setView to navigate to our area
+  addProviderTiles("Esri.WorldPhysical", group = "Physical") %>% 
+  addProviderTiles("Esri.WorldImagery", group = "Aerial") %>% 
+  addProviderTiles("MtbMap", group = "Geo") %>% 
+
+  addLayersControl(                                 # we are adding layers control to the maps
+    baseGroups = c("Geo","Aerial", "Physical"),
+    options = layersControlOptions(collapsed = T))
+```
+
+
+# Task 1: Create a Danish equivalent of AUSmap with esri layers, but call it DANmap
+
+
+Focus on Denmark. Firstly, we have discovered externally, that the coordinates for Denmark are lng = 11, lat = 56 and we'll be using zoom = 7.
+
+```{r, echo = FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  setView( lng = 11, lat = 56, zoom = 7 ) %>%  # let's use setView to navigate to our area
+  addProviderTiles("Esri.WorldPhysical", group = "Physical") %>% 
+  addProviderTiles("Esri.WorldImagery", group = "Aerial") %>% 
+  addProviderTiles("MtbMap", group = "Geo") %>% 
+  addLayersControl(                                 # we are adding layers control to the maps
+    baseGroups = c("Geo","Aerial", "Physical"),
+    options = layersControlOptions(collapsed = T))
+  
+```
+  
+
+Now, prepare to select backgrounds
+```{r, echo = FALSE}
+esri <- grep("^Esri", providers, value = TRUE)
+```
+
+Create a basic basemap
+```{r, echo = FALSE}
+l_dan <- leaflet() %>%   # assign the base location to an object
+  setView(11, 56, zoom = 7)
+```
+
+
+Select backgrounds from among provider tiles. To view them the options, 
+```{r, echo = FALSE}
+for (provider in esri) {
+  l_dan <- l_dan %>% addProviderTiles(provider, group = provider)
+  }
+
+leaflet() %>% 
+  addTiles() %>%  # checking I am in the right area
+  addProviderTiles("Esri.WorldImagery",       # add custom Esri World Physical map tiles
+                   options = providerTileOptions(opacity=0.5)) %>%
+  setView(11, 56, zoom = 7)
+
+l_dan
+
+```
+
+
+
+#Map of Denmark
+```{r, echo = FALSE}
+DANmap <- l_dan %>%
+  addLayersControl(baseGroups = names(esri),
+                   options = layersControlOptions(collapsed = FALSE)) %>%
+  addMiniMap(tiles = esri[[1]], toggleDisplay = TRUE,
+             position = "bottomright") %>%
+  addMeasure(
+    position = "bottomleft",
+    primaryLengthUnit = "meters",
+    primaryAreaUnit = "sqmeters",
+    activeColor = "#3D535D",
+    completedColor = "#7D4479") %>% 
+  htmlwidgets::onRender("
+                        function(el, x) {
+                        var myMap = this;
+                        myMap.on('baselayerchange',
+                        function (e) {
+                        myMap.minimap.changeLayer(L.tileLayer.provider(e.name));
+                        })
+                        }") %>% 
+  addControl("", position = "topright")
+ 
+
+DANmap
+```
+
+Theis hjalp mig. Jeg havde et meltdown.
+
+
+########## ADD DATA TO LEAFLET
+
+# In this section you will manually create machine-readable spatial data from GoogleMaps: 
+
+First, go to https://bit.ly/CreateCoordinates1
+Enter the coordinates of your favorite leisure places in Denmark 
+
+extracting them from the URL in googlemaps, adding name and type of monument.
+Remember to copy the coordinates as a string, as just two decimal numbers separated by comma. 
+
+Caveats: Do NOT edit the grey columns! They populate automatically!
+
+Second, read the sheet into R. You will need gmail login information. 
+watch the console, it may ask you to authenticate or put in the number 
+that corresponds to the account you wish to use.
+
+Libraries
+```{r, echo = FALSE}
+library(tidyverse)
+library(googlesheets4)
+library(leaflet)
+```
+
+
+Read in a Google sheet
+```{r, echo = FALSE}
+places <- read_sheet("https://docs.google.com/spreadsheets/d/1PlxsPElZML8LZKyXbqdAYeQCDIvDps2McZx1cTVWSzI/edit#gid=124710918",
+                     col_types = "cccnncnc", range = "DM2023")
+glimpse(places)
+```
+
+
+
+load the coordinates in the map and check: are any points missing? Why?
+```{r, echo = FALSE}
+leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng = places$Longitude, 
+             lat = places$Latitude,
+             popup = places$Description)
+```
+
+No points are msissing for what i am aware of.
+
+
+#########################################################
+
+
+# Task 2: Read in the googlesheet data you and your colleagues populated with data into the DANmap object you created in Task 1.
+
+This version of Danmap is updated from it's previous, by including the locational data we implemented previous.
+```{r, echo = FALSE}
+DANmap <- l_dan %>%
+  addLayersControl(baseGroups = names(esri),
+                   options = layersControlOptions(collapsed = FALSE)) %>%
+  addMiniMap(tiles = esri[[1]], toggleDisplay = TRUE,
+             position = "bottomright") %>%
+  addMeasure(
+    position = "bottomleft",
+    primaryLengthUnit = "meters",
+    primaryAreaUnit = "sqmeters",
+    activeColor = "#3D535D",
+    completedColor = "#7D4479") %>% 
+  htmlwidgets::onRender("
+                        function(el, x) {
+                        var myMap = this;
+                        myMap.on('baselayerchange',
+                        function (e) {
+                        myMap.minimap.changeLayer(L.tileLayer.provider(e.name));
+                        })
+                        }") %>% 
+  addControl("", position = "topright") %>% 
+  leaflet() %>% 
+  addTiles() %>% 
+  addMarkers(lng = places$Longitude, 
+             lat = places$Latitude,
+             popup = places$Placename,
+             clusterOptions = markerClusterOptions())
+DANmap
+```
+
+
+
+
+# Task 3: Can you cluster the points in Leaflet? Google "clustering options in Leaflet"
+
+YES. You cluster options for a while.
+
+# Task 4: Look at the map and consider what it is good for and what not.
+
+The map would be great at covering great datasets, where geographical data is of importance. Say you're mapping it out and find a pattern.
+F.ex. Mapping incidents of car crashes. If car crashes occur more frequently at a specific area, that might be able to tell us something,
+we might have missed if not.
+
+# Task 5: Find out how to display notes and classifications in the map.
+
+I did that.
+
+
+# GEM Som HTML:S
+
+```{r, echo = FALSE}
+saveWidget(DANmap, "DANmap.html", selfcontained = TRUE)
+```
+
+
+Aflever html seperat.
