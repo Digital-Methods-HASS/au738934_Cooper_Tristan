@@ -1,0 +1,145 @@
+---
+title: "Jews_Sentiments_FinalDraft"
+author: "Theis André Schwartz og Tristan Alexander Michael Cooper"
+output: html_document
+date: "2024-05-20"
+---
+
+
+This version of the assignment utilizes R 4.4.0, the newest version of the program pr.2024/05/14 on posit.cloud. We recommend using posit.cloud when reviewing this code, as that is the platfor, we utilized for this product.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Download links and install packages for the project. This will be visible in the Rmarkdown document, but will be hidden with the 'echo function'.
+```{r, echo=FALSE}
+install.packages("devtools")
+devtools::install_github("Guscode/Sentida")
+install.packages("pdftools")
+install.packages("here")
+install.packages("tidyverse")
+install.packages("tidytext")
+install.packages("textdata")
+install.packages("ggwordcloud")
+devtools::install_github("Guscode/Sentida")
+```
+
+Loading every package we will be using.
+```{r, echo=FALSE}
+# For text mining:
+library(tidyverse)
+library(here)
+library(pdftools)
+library(tidytext)
+library(textdata)
+library(ggwordcloud)
+library(Sentida)
+library(dplyr)
+library(stringr)
+```
+
+
+We will be starting off by entering the data from 1800-1839, using the search string "(jødisk* OR jøde* OR mos*it) AND py:[1800 TO 1839]"
+```{r}
+
+jewsearlycent <- read_csv("https://labs.statsbiblioteket.dk/labsapi/api/aviser/export/fields?query=%28j%C3%B8disk%2A%20OR%20j%C3%B8de%2A%20OR%20mos%2Ait%29%20AND%20py%3A%5B1800%20TO%201839%5D&fields=link&fields=recordID&fields=timestamp&fields=pwa&fields=fulltext_org&fields=familyId&fields=lplace&max=-1&structure=header&structure=content&format=CSV")
+```
+
+Next, we will create a seperate column for 'year', splitting the specific dates from the year of publication.
+```{r}
+#Split years
+
+jewsearlycent %>%
+  mutate(year=year(timestamp)) -> jewishyear
+
+```
+
+But before we move on, we will briefly take a moment to calculate the average accuracy of the OCR scannings, from our dataset. We will do this with the following command.
+```{r}
+#Calculate mean() of pwa.
+
+mean(jewishyear$pwa)
+
+```
+We can see here, that the accuracy of the OCR scannings average at around 48.57 out of 100, or 48%. This will be acknowlegded and taken into account in the final report.
+
+Now, we will run a series of unnest and antijoin commands, to tidy up our dataset. First, we will unnest the words and seperate them individually.
+```{r}
+#Tidying
+
+jewishyear %>%
+  unnest_tokens(word, fulltext_org) -> jewish_tidy
+```
+
+Next, we will load our stopword list for danish words from the 1800s, using a stopword package created by Max Odsbjerg Pedersen, and apply it to the dataset.
+```{r}
+#Loading stopwords by Max Odsbjerg Pedersen.
+
+stopord_1800 <- read_csv("https://gist.githubusercontent.com/maxodsbjerg/1537cf14c3d46b3d30caa5d99f8758e9/raw/9f044a38505334f035be111c9a3f654a24418f6d/stopord_18_clean.csv")
+
+jewish_tidy %>% 
+  anti_join(stopord_1800) %>%
+  group_by(familyId, lplace, timestamp) %>% 
+  count(word, sort = TRUE) -> jewish_tidy_stop
+
+```
+
+Afterwards, we will apply the Sentida Sentiment Tool to our dataset, which will be run, but only visibly included in the Rmarkdown.
+```{r, include=FALSE}
+
+#jewish_tidy_stop +
+  #sentida(jewish_tidy_stop$word, output="mean") +
+  jewish_tidy_stop$sentiment <- lapply(jewish_tidy_stop$word,sentida, output="total")
+#unlisting
+unlist(jewish_tidy_stop$sentiment)
+jewish_senti <- jewish_tidy_stop %>% 
+  mutate(senti = unlist(sentiment)) %>% 
+  select(-sentiment) 
+
+#making a list of words without numbers
+jewish_no_numeric <- jewish_senti %>%
+  filter(is.na(as.numeric(word)))
+```
+
+The rating of overall articles here tend towards the negative overwhelmingly, however this isn't always odd for newspapers, a medium that historically thrives on conflicts.
+
+Now, we will be making graphs to show the sentiment across the different newspapers.
+```{r plotting}
+jewishplotsent = ggplot(data= jewish_no_numeric, aes(x = timestamp, y = senti)) +
+  geom_line() + 
+  facet_wrap(facets= vars(familyId))
+
+jewishplotsent
+```
+
+As we have a lot of information about the jewish feuds from 1813 to 1821, we want to create a subset of data, containing this time interval.
+This was done using a tutorial from neonscience.org: https://www.neonscience.org/resources/learning-hub/tutorials/dc-subset-data-no-data-values-r
+```{r}
+jewish_feuds <- subset(jewish_no_numeric,
+                      timestamp >=as.POSIXct("1813-1-1 00:00", 
+                                            tz = "Denmark") &
+                      timestamp <=as.POSIXct("1821-12-31 00:00",
+                                            tz = "Denmark"))
+```
+
+Finally, we will visualize the sentiment around the time of the feuds, specifically
+```{r plotting the jewish feuds}
+jewish_feud_senti = ggplot(data = jewish_feuds, aes(x = timestamp, y = senti, color = familyId)) +
+  geom_point(alpha = 0.3) +
+  facet_wrap(vars(familyId))+
+  labs(title = "sentiment towards jewish people in danish newspapers around the time of the jewish feuds (1813-1821)", x = "Year", y = "sentiment")
+
+sentida(jewish_feuds$word, output="mean")
+
+jewish_feud_senti
+
+ggsave("Feudssentiment.jpeg", width = 12, height = 8)
+```
+
+Thus, we have applied Sentiment analysis to our dataset, visualized graphs and are now ready to analyze them.
+
+
+
+End draft.
+-------------------------------------------------------------------------------------------------
